@@ -7,46 +7,30 @@ from utils import generate_reservoir, scale_res, lin_reg, sigmoid
 # This file contains the ReservoirComputer class and necessary helper functions
 # The main method at the bottom contains a demo of the code, run this file in the terminal to check it out
 
-class ReservoirComputer(MemorylessReservoirComputer):
-    def __init__(self, dim_system=3, dim_reservoir=300, sigma=0.1, rho=1.1, density=0.05, augment=True):
-        super().__init__(dim_system=dim_system, dim_reservoir=dim_reservoir, sigma=sigma, augment=augment)
-        self.A = generate_reservoir(dim_reservoir, rho, density)
-    
-    def advance(self, u):
-        """
-        Generate the next r_state given an input u and the current r_state
-        """
-        
-        self.r_state = 2 * (sigmoid(np.dot(self.A, self.r_state) + np.dot(self.W_in, u)) - 0.5)
-
 class MemorylessReservoirComputer:
-    def __init__(self, dim_system=3, dim_reservoir=300, sigma=0.1, augment=True):
+    def __init__(self, dim_system=3, dim_reservoir=300, delta=0.1, in_density=0.2, beta=0.0001):
         self.dim_reservoir = dim_reservoir
         self.dim_system = dim_system
-        self.augment = augment
+        self.beta = beta
         self.r_state = np.zeros(dim_reservoir)
-        self.W_in = 2 * sigma * (np.random.rand(dim_reservoir, dim_system) - 0.5)
-        if self.augment:
-            self.W_out = np.zeros((dim_system, 2 * dim_reservoir))
-        else:
-            self.W_out = np.zeros((dim_system, dim_reservoir))
+        W_in = 2 * delta * (np.random.rand(dim_reservoir, dim_system) - 0.5)
+        self.W_in = np.where(np.random.rand(dim_reservoir, dim_system) <= in_density, W_in, 0)
+        self.W_out = np.zeros((dim_system, 2 * dim_reservoir + 1))
     
     def advance(self, u):
         """
         Generate the next r_state given an input u and the current r_state
         """
         
-        self.r_state = 2 * (sigmoid(np.dot(self.W_in, u)) - 0.5)
+        self.r_state = sigmoid(np.dot(self.W_in, u))
         
     def readout(self):
         """
         Generate and return the prediction v given the current r_state
         """
-        if self.augment:
-            r_temp = np.concatenate([self.r_state, self.r_state**2])
-            v = np.dot(self.W_out, r_temp)
-        else:
-            v = np.dot(self.W_out, self.r_state)
+
+        r_temp = np.concatenate([self.r_state, self.r_state**2, np.array([1])])
+        v = np.dot(self.W_out, r_temp)
         return v
     
     def train(self, traj):
@@ -61,10 +45,10 @@ class MemorylessReservoirComputer:
             R[:, i] = self.r_state
             x = traj[i]
             self.advance(x)
-        if self.augment:
-            R = np.concatenate([R, R** 2])
-        self.W_out = lin_reg(R, traj, 0.0001)
-        print("train loss: {}".format(np.mean((self.W_out @ R - traj.transpose())**2)))
+        
+        R = np.concatenate([R, R**2, np.ones((1, traj.shape[0]))])
+        self.W_out = lin_reg(R, traj, self.beta)
+        #print("train loss: {}".format(np.mean((self.W_out @ R - traj.transpose())**2)))
         
     def predict(self, steps):
         """
@@ -82,6 +66,20 @@ class MemorylessReservoirComputer:
             predicted[i] = v
             self.advance(v)
         return predicted
+
+class ReservoirComputer(MemorylessReservoirComputer):
+    def __init__(self, dim_system=3, dim_reservoir=300, delta=0.1, in_density=0.2, rho=1.1, density=0.05, beta=0.0001):
+        super().__init__(dim_system=dim_system, dim_reservoir=dim_reservoir, delta=delta, in_density=in_density, beta=beta)
+        self.A = generate_reservoir(dim_reservoir, rho, density)
+    
+    def advance(self, u):
+        """
+        Generate the next r_state given an input u and the current r_state
+        """
+        
+        self.r_state = sigmoid(np.dot(self.A, self.r_state) + np.dot(self.W_in, u))
+
+
 
 def compare_times(data_path, train_times, iterations):
     MRC_avg_times = []
@@ -120,22 +118,22 @@ if __name__ == "__main__":
     from mpl_toolkits.mplot3d import Axes3D
 
     dt = 0.02
-    # train_data, val_data = get_lorenz_data(tf=250, dt=dt)
+    train_data, val_data = get_lorenz_data(tf=400, dt=dt)
     # train_data, val_data = get_KS_data(num_gridpoints=100, tf=5000, dt=dt)
     # train_data, val_data = KS_from_csv("data/KS_L=44_tf=10000_dt=.25_D=64.csv", 3000, 1000, dt)
-    train_data, val_data = get_chen_data(tf=1000, dt=dt, skip=25, split=0.8)
-    #train_data, val_data = get_rossler_data(tf=800, dt=dt, skip=25, split=0.8)
+    # train_data, val_data = get_chen_data(tf=400, dt=dt, skip=25, split=0.8)
+    # train_data, val_data = get_rossler_data(tf=400, dt=dt, skip=25, split=0.8)
     # train_data, val_data = get_dadras_data(tf=400, dt=dt, skip=25, split=0.8)
 
-    MRC = ReservoirComputer(dim_reservoir=300, dim_system=3, rho=0, sigma=0.01, augment=True)
-    MRC.train(train_data)
-    predicted = MRC.predict(val_data.shape[0])
+    # MRC = MemorylessReservoirComputer(dim_reservoir=300, dim_system=3, delta=3, in_density=0.05)
+    # MRC.train(train_data)
+    # predicted = MRC.predict(val_data.shape[0])
 
 
 
-    # RC = ReservoirComputer(dim_reservoir=3000, dim_system=64, rho=0, sigma=0.1, augment=True)
-    # RC.train(train_data)
-    # predicted = RC.predict(val_data.shape[0])
+    RC = ReservoirComputer(dim_system=3, dim_reservoir=300, delta=0.1, in_density=0.2, rho=1.1, density=0.05, beta=0.0001)
+    RC.train(train_data)
+    predicted = RC.predict(val_data.shape[0])
 
     # plot_images(predicted, val_data, 600)
 

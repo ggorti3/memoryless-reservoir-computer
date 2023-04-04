@@ -7,15 +7,17 @@ from scipy.signal import argrelmin, argrelmax
 ### functions for plotting results ###
 
 def short_term_time(actual, predicted, dt, tolerance=1e-2):
-    _, d = actual.shape
+    n, d = actual.shape
     i = 0
-    while True:
+    while i < n:
         x1 = actual[i]
         x2 = predicted[i]
         error = (np.sum((x2 - x1)**2)**0.5) / (np.sum(x1**2)**0.5)
         if error > tolerance:
             return dt * i
         i += 1
+        
+    return dt * i
 
 def compare(predicted, actual, t, fontsize = 10):
     """

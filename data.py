@@ -63,8 +63,8 @@ def generateChen(r0, tf, dt, a, b, c):
     ts, traj = RK4(chen, r0, tf, dt)
     return (ts, traj)
 
-def get_chen_data(tf=400, dt=0.02, skip=25, split=0.8):
-    _, traj = generateChen((1, 1, 1), tf, dt, 5, -10, -.38)
+def get_chen_data(tf=400, dt=0.02, skip=25, split=0.8, x0=np.array([1, 1, 1])):
+    _, traj = generateChen(x0, tf, dt, 5, -10, -.38)
     
     skip_steps = int(25 / dt)
     traj = traj[skip_steps:]
@@ -90,8 +90,8 @@ def generateDadras(r0, tf, dt, a, b, c, d, e):
     ts, traj = RK4(dadras, r0, tf, dt)
     return (ts, traj)
 
-def get_dadras_data(tf=100, dt=0.02, skip=25, split=0.8):
-    _, traj = generateDadras((1, 1, 1), tf, dt, 3, 2.7, 1.7, 2, 9)
+def get_dadras_data(tf=100, dt=0.02, skip=25, split=0.8, x0=np.array([1, 1, 1])):
+    _, traj = generateDadras(x0, tf, dt, 3, 2.7, 1.7, 2, 9)
     
     skip_steps = int(25 / dt)
     traj = traj[skip_steps:]
@@ -117,8 +117,8 @@ def generateRossler(r0, tf, dt, a, b, c):
     ts, traj = RK4(rossler, r0, tf, dt)
     return (ts, traj)
 
-def get_rossler_data(tf=800, dt=0.01, skip=25, split=0.8):
-    _, traj = generateRossler((1, 1, 1), tf, dt, .2, .2, 5.7)
+def get_rossler_data(tf=800, dt=0.01, skip=25, split=0.8, x0=np.array([1, 1, 1])):
+    _, traj = generateRossler(x0, tf, dt, .2, .2, 5.7)
     
     skip_steps = int(25 / dt)
     traj = traj[skip_steps:]
@@ -130,8 +130,8 @@ def get_rossler_data(tf=800, dt=0.01, skip=25, split=0.8):
     
     return train_data, val_data
 
-def get_lorenz_data(tf=250, dt=0.02, skip=25, split=0.8):
-    _, traj = generateLorenz((1, 1, 1), tf, dt, 10, 28, 8/3)
+def get_lorenz_data(tf=250, dt=0.02, skip=25, split=0.8, x0=np.array([1, 1, 1])):
+    _, traj = generateLorenz(x0, tf, dt, 10, 28, 8/3)
     
     skip_steps = int(25 / dt)
     traj = traj[skip_steps:]

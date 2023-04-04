@@ -1,5 +1,6 @@
 import numpy as np
-from reservoir_computer import ReservoirComputer
+from lyapunov import lyapunov_exponents_experimental_rc, lyapunov_exponents_experimental_nn, lyapunov_exponents_experimental_cmrc
+from reservoir_computer import ReservoirComputer, MemorylessReservoirComputer
 from neural_net import *
 from visualization import short_term_time, compare
 from torch.utils.data import DataLoader
@@ -7,9 +8,180 @@ from cmrc import CMRC
 from torch_data import KS_to_torch
 import random
 
-def short_term_test(tf, dt, dim_system, dim_reservoir, data_func, iterations, lambda1):
-    #train_data, val_data = data_func(tf=tf, dt=dt)
-    train_data, val_data = KS_from_csv("data/KS_L=44_tf=10000_dt=.25_D=64.csv", 8000, 1000, dt)
+def rsfn_grid_search(traj, n_train, n_val, dim_reservoirs, deltas, densities, betas, iterations=20, k=20):
+    mean_times = []
+    j = 0
+    n = len(dim_reservoirs) * len(deltas) * len(densities) * len(betas)
+    for dim_reservoir in dim_reservoirs:
+        for delta in deltas:
+            for density in densities:
+                for beta in betas:
+                    times = []
+                    for i in range(iterations):
+                        idx = random.randrange(traj.shape[0] - n_train - n_val)
+                        training_data = traj[idx:(idx + n_train)]
+                        val_data = traj[(idx + n_train):(idx + n_train + n_val)]
+
+                        rsfn = MemorylessReservoirComputer(
+                            dim_system=traj.shape[1],
+                            dim_reservoir=dim_reservoir,
+                            delta=delta,
+                            in_density=density,
+                            beta=beta
+                        )
+
+                        rsfn.train(training_data)
+                        pred = rsfn.predict(n_val)
+                        time = short_term_time(val_data, pred, 0.02, tolerance=2e-1)
+                        times.append(time)
+                    
+                    mean_time = np.mean(np.array(times))
+                    print("config {}/{}".format(j + 1, n))
+                    j += 1
+                    mean_times.append(mean_time)
+    
+    mean_times = np.array(mean_times)
+    sort_idxs = np.argsort(mean_times)[::-1]
+
+    print("dim_reservoir   delta   density   beta        | mean_time   ")
+    print("____________________________________________________________")
+    for i in sort_idxs[:k]:
+        dim_reservoir = dim_reservoirs[(i // (len(deltas) * len(densities) * len(betas)))]
+        delta = deltas[(i // (len(densities) * len(betas))) % len(deltas)]
+        density = densities[(i // len(betas)) % len(densities)]
+        beta = betas[i % len(betas)]
+        mean_time = mean_times[i]
+        print("{:<16}{:<8.4f}{:<10.4f}{:<12.2E}| {:<12.4f}".format(
+            dim_reservoir,
+            delta,
+            density,
+            beta,
+            mean_time
+        ))
+
+def rc_grid_search(traj, n_train, n_val, dim_reservoirs, deltas, in_densities, rhos, densities, betas, iterations=20, k=20):
+    mean_times = []
+    j = 0
+    n = len(dim_reservoirs) * len(deltas) * len(in_densities) * len(rhos) * len(densities) * len(betas)
+    for dim_reservoir in dim_reservoirs:
+        for delta in deltas:
+            for in_density in in_densities:
+                for rho in rhos:
+                    for density in densities:
+                        for beta in betas:
+                            times = []
+                            for i in range(iterations):
+                                idx = random.randrange(traj.shape[0] - n_train - n_val)
+                                training_data = traj[idx:(idx + n_train)]
+                                val_data = traj[(idx + n_train):(idx + n_train + n_val)]
+
+                                rc = ReservoirComputer(
+                                    dim_system=traj.shape[1],
+                                    dim_reservoir=dim_reservoir,
+                                    delta=delta,
+                                    in_density=in_density,
+                                    rho=rho,
+                                    density=density,
+                                    beta=beta
+                                )
+
+                                rc.train(training_data)
+                                pred = rc.predict(n_val)
+                                time = short_term_time(val_data, pred, 0.02, tolerance=2e-1)
+                                times.append(time)
+                            
+                            mean_time = np.mean(np.array(times))
+                            print("config {}/{}".format(j + 1, n))
+                            j += 1
+                            mean_times.append(mean_time)
+    
+    mean_times = np.array(mean_times)
+    sort_idxs = np.argsort(mean_times)[::-1]
+
+    print("dim_reservoir   delta   in_density   rho   density   beta        | mean_time   ")
+    print("_______________________________________________________________________________")
+    for i in sort_idxs[:k]:
+        dim_reservoir = dim_reservoirs[(i // (len(deltas) * len(in_densities) * len(rhos) * len(densities) * len(betas)))]
+        delta = deltas[(i // (len(in_densities) * len(rhos) * len(densities) * len(betas))) % len(deltas)]
+        in_density = in_densities[(i // (len(rhos) * len(densities) * len(betas))) % len(in_densities)]
+        rho = rhos[(i // (len(densities) * len(betas))) % len(rhos)]
+        density = densities[(i // len(betas)) % len(densities)]
+        beta = betas[i % len(betas)]
+        mean_time = mean_times[i]
+        print("{:<16}{:<8.4f}{:<13.4f}{:<6.3f}{:<10.4f}{:<12.2E}| {:<12.4f}".format(
+            dim_reservoir,
+            delta,
+            in_density,
+            rho,
+            density,
+            beta,
+            mean_time
+        ))
+
+def nn_grid_search(traj, n_train, n_val, dim_hiddens, stop_losses, lambdas, max_epochs, iterations=20, k=20):
+    mean_times = []
+    j = 0
+    n = len(dim_hidden) * len(stop_losses) * len(lambdas)
+    for dim_hidden in dim_hiddens:
+        for stop_loss in stop_losses:
+            for l in lambdas:
+                times = []
+                for i in range(iterations):
+                    idx = random.randrange(traj.shape[0] - n_train - n_val)
+                    training_data = traj[idx:(idx + n_train)]
+                    val_data = traj[(idx + n_train):(idx + n_train + n_val)]
+
+                    train_set = ChaosDataset(train_data)
+                    train_loader = DataLoader(train_set, batch_size=32, shuffle=True)
+
+                    FFNN = FeedForwardNN(val_data.shape[1], dim_hidden)
+
+                    train(
+                        train_loader=train_loader,
+                        net=FFNN,
+                        lr=lr,
+                        epochs=1000
+                    )
+
+                    predicted = generate_trajectory(
+                        net=FFNN,
+                        x0=train_data[-1],
+                        steps=val_data.shape[0]
+                    )
+
+                    rsfn.train(training_data)
+                    pred = rsfn.predict(n_val)
+                    time = short_term_time(val_data, pred, 0.02, tolerance=2e-1)
+                    times.append(time)
+                
+                mean_time = np.mean(np.array(times))
+                print("config {}/{}".format(j + 1, n))
+                j += 1
+                mean_times.append(mean_time)
+    
+    mean_times = np.array(mean_times)
+    sort_idxs = np.argsort(mean_times)[::-1]
+
+    print("dim_reservoir   delta   density   beta        | mean_time   ")
+    print("____________________________________________________________")
+    for i in sort_idxs[:k]:
+        dim_reservoir = dim_reservoirs[(i // (len(deltas) * len(densities) * len(betas)))]
+        delta = deltas[(i // (len(densities) * len(betas))) % len(deltas)]
+        density = densities[(i // len(betas)) % len(densities)]
+        beta = betas[i % len(betas)]
+        mean_time = mean_times[i]
+        print("{:<16}{:<8.4f}{:<10.4f}{:<12.2E}| {:<12.4f}".format(
+            dim_reservoir,
+            delta,
+            density,
+            beta,
+            mean_time
+        ))
+
+def short_term_test(tf, dt, rc_params, mrc_params, nn_params, data_func, iterations, lambda1):
+    x0 = np.random.rand(3)
+    train_data, val_data = data_func(tf=tf, dt=dt, x0=x0)
+    #train_data, val_data = KS_from_csv("data/KS_L=44_tf=10000_dt=.25_D=64.csv", 8000, 1000, dt)
     train_set = ChaosDataset(train_data)
     train_loader = DataLoader(train_set, batch_size=32, shuffle=True)
 
@@ -17,8 +189,8 @@ def short_term_test(tf, dt, dim_system, dim_reservoir, data_func, iterations, la
     RC_times = []
     FFNN_times = []
     for i in range(iterations):
-        RC = ReservoirComputer(dim_reservoir=dim_reservoir, dim_system=dim_system, rho=0.9, sigma=0.1, augment=True)
-        MRC = MemorylessReservoirComputer(dim_reservoir=dim_reservoir, dim_system=dim_system, sigma=0.1, augment=True)
+        RC = ReservoirComputer(**rc_params)
+        MRC = MemorylessReservoirComputer(**mrc_params)
 
         # FFNN = FeedForwardNN(dim_system, 2 * dim_reservoir)
         # train(
@@ -172,168 +344,178 @@ def arbitrary_location_predict(long_traj, tt, tv, dt, dim_system, dim_reservoir,
     plt.show()
 
 
+def rc_climate_test(tf, dt, model_class, model_params, data_func, T, k, iterations):
+    x0 = np.random.rand(3)
+    train_data, val_data = data_func(tf=tf, dt=dt, x0=x0)
+    x0 = train_data[-1]
 
-
-
+    exps_list = []
+    for i in range(iterations):
+        model = model_class(**model_params)
+        model.train(train_data)
+        
+        exps = lyapunov_exponents_experimental_rc(
+            x0=x0,
+            dt=dt,
+            T=T,
+            k=k,
+            net=model,
+            perturb=1e-12
+        )
+        exps_list.append(exps)
+    
+    all_exps = np.stack(exps_list)
+    mean_exps = np.mean(all_exps, axis=0)
+    std_exps = np.std(all_exps, axis=0)
+    print("All Exps:")
+    print(all_exps)
+    print("Mean Exps:")
+    print(mean_exps)
+    print("Std Exps")
+    print(std_exps)
 
 
 if __name__ == "__main__":
     from data import *
+    from torch.utils.data import DataLoader
+
+    # traj, _ = get_dadras_data(tf=12500, dt=0.02)
+
+    # dim_reservoirs = [300]
+    # deltas = np.exp(np.linspace(np.log(0.01), np.log(3), 15))[4:12]
+    # in_densities = [0.5, 0.75, 1]
+    # rhos = [0.8, 0.9, 1, 1.1, 1.2]
+    # densities = [0.05, 0.1, 0.2, 0.5, 0.75, 1]
+    # betas = np.exp(np.linspace(np.log(1e-6), np.log(0.1), 5))
+
+    # dim_reservoirs = [300]
+    # deltas = np.exp(np.linspace(np.log(0.01), np.log(3), 3))
+    # in_densities = [1]
+    # rhos = [0.9, 1.1]
+    # densities = [0.05, 0.2]
+    # betas = np.exp(np.linspace(np.log(1e-6), np.log(0.1), 3))
+
+
+    # rsfn_grid_search(
+    #     traj=traj,
+    #     n_train=10000,
+    #     n_val=2500,
+    #     dim_reservoirs=dim_reservoirs,
+    #     deltas=deltas,
+    #     densities=in_densities,
+    #     betas=betas,
+    #     iterations=20
+    # )
+
+    # rc_grid_search(
+    #     traj=traj,
+    #     n_train=10000,
+    #     n_val=2500,
+    #     dim_reservoirs=dim_reservoirs,
+    #     deltas=deltas,
+    #     in_densities=in_densities,
+    #     rhos=rhos,
+    #     densities=densities,
+    #     betas=betas,
+    #     iterations=4,
+    # )
+
+    rc_params_lorenz = {
+        "dim_system":3,
+        "dim_reservoir":300,
+        "delta":0.0510,
+        "in_density":1,
+        "rho":1.2,
+        "density":0.5,
+        "beta":1e-6
+    }
+
+    mrc_params_lorenz = {
+        "dim_system":3,
+        "dim_reservoir":300,
+        "delta":0.0510,
+        "in_density":1,
+        "beta":1e-6
+    }
+
+    mrc_params_dadras = {
+        "dim_system":3,
+        "dim_reservoir":300,
+        "delta":0.1152,
+        "in_density":1,
+        "beta":1e-6
+    }
+
+    nn_params = {}
 
     # short_term_test(
     #     tf=250,
-    #     dt=0.25,
-    #     dim_system=64,
-    #     dim_reservoir=3000,
-    #     data_func=get_chen_data,
+    #     dt=0.02,
+    #     rc_params=rc_params,
+    #     mrc_params=mrc_params,
+    #     nn_params=nn_params,
+    #     data_func=get_dadras_data,
     #     iterations=20,
-    #     lambda1=0.088
+    #     lambda1=0.38
     # )
 
-    long_traj, _ = get_lorenz_data(tf=2000, dt=0.02)
-    arbitrary_location_predict(
-        long_traj=long_traj,
-        tt=250,
-        tv=12,
+    # train_data, val_data = get_dadras_data(tf=250, dt=0.02)
+    # x0 = train_data[-1]
+    # rsbn = MemorylessReservoirComputer(**mrc_params_dadras)
+    # rsbn = MemorylessReservoirComputer(dim_system=3, dim_reservoir=300, delta=0.1, in_density=0.2, beta=0.0001)
+    # rsbn.train(train_data)
+    # predicted = rsfn.predict(val_data.shape[0])
+
+    # exps = lyapunov_exponents_experimental_rc(
+    #     x0=x0,
+    #     dt=0.02,
+    #     T=10,
+    #     k=1000,
+    #     net=rsbn,
+    #     perturb=1e-12
+    # )
+    # print(exps)
+
+    rc_climate_test(
+        tf=250,
         dt=0.02,
-        dim_system=3,
-        dim_reservoir=300,
-        lambda1=0.902
+        model_class=MemorylessReservoirComputer,
+        model_params=mrc_params_dadras,
+        data_func=get_dadras_data,
+        T=10,
+        k=2000,
+        iterations=20
     )
 
-    from data import *
-    from visualization import compare, plot_images, short_term_time
-    from torch.utils.data import DataLoader
+    # model_configs = [(MemorylessReservoirComputer, mrc_params), (ReservoirComputer, rc_params)]
+    # data_funcs = [get_lorenz_data, get_rossler_data, get_chen_data, get_dadras_data]
 
 
-    # dt = 0.02
-    # train_data, val_data = get_lorenz_data(tf=250, dt=dt)
-    # train_set = ChaosDataset(train_data)
-    # train_loader = DataLoader(train_set, batch_size=32, shuffle=True)
-
-    # dt = 0.25
-    # train_data, val_data = KS_from_csv("data/KS_L=44_tf=10000_dt=.25_D=64.csv", 3000, 1000, dt)
-    # train_set = ChaosDataset(train_data)
-    # train_loader = DataLoader(train_set, batch_size=32, shuffle=True)
-
-    # FFNN = FeedForwardNN(64, 6000)
-    # train(
-    #     train_loader=train_loader,
-    #     net=FFNN,
-    #     lr=0.00001,
-    #     epochs=1000
-    # )
-    # predicted2 = generate_trajectory(
-    #     net=FFNN,
-    #     x0=train_data[-1],
-    #     steps=val_data.shape[0]
-    # )
-    # np.save("ffnn_pred", predicted2)
-
-    # padding = 8
-    # sub_length = 16
-    # n = 750
-    # training_traj, target = KS_to_torch(train_data, padding, sub_length)
-    # cmrc = CMRC(n, sub_length, padding, sigma=0.1)
-    # cmrc.generate_r_states(training_traj)
-    # cmrc.train_normal_eq(target)
-    # assisted_vec = np.concatenate([train_data[-1, val_data.shape[1] - padding:], train_data[-1], train_data[-1, :padding]])
-    # assisted_vec = torch.tensor(assisted_vec, dtype=torch.double)
-    # cmrc.advance(assisted_vec)
-    # predicted3 = cmrc.predict(val_data.shape[0])
-    # np.save("cmrc_pred", predicted3)
-
-
-    # MRC = ReservoirComputer(dim_reservoir=3000, dim_system=64, rho=0, sigma=0.1, augment=True)
-    # MRC.train(train_data)
-    # predicted1 = MRC.predict(val_data.shape[0])
-    # np.save("mrc_pred", predicted1)
-
-    #t_grid = np.linspace(0, val_data.shape[0] * dt, val_data.shape[0])
-    #compare(predicted, val_data, t_grid)
-    #plot_images(predicted, val_data, 600)
-
-    ####predicted, actual, num_preds, dt=0.25, lyapunov=0.088
-    # num_preds = 300
-    # predicted2 = np.load("ffnn_pred.npy")[:num_preds]
-    # #predicted3 = np.load("cmrc_pred.npy")[:num_preds]
-    # predicted3 = predicted3[:num_preds]
-    # predicted1 = np.load("mrc_pred.npy")[:num_preds]
-
-    # lyapunov=0.088
-    # d = predicted1.shape[1]
-    # n = min(num_preds, predicted1.shape[0])
-    # l_time = 1 / lyapunov
-    # l_steps = l_time / dt
-    # xtick_idxs = np.arange(0, n, l_steps)
-    # xtick_labels = [i for i in range(xtick_idxs.shape[0])]
-
-    # ytick_idxs = np.arange(0, 64 + 01e-4, 64//2)
-    # ytick_labels = range(0, 44 + 1, 44//2)
-
-    # fig, ((ax1, ax2, ax3), (ax4, ax5, ax6), (ax7, ax8, ax9)) = plt.subplots(3, 3)
-    # vmin, vmax = -3, 3
-
-    # ax1.imshow(val_data.transpose()[:, :num_preds], cmap='coolwarm', vmin=vmin, vmax=vmax)
-    # ax1.set_title("Truth")
-    # ax1.set_xticks(xtick_idxs)
-    # ax1.set_xticklabels(xtick_labels)
-    # ax1.set_yticks(ytick_idxs)
-    # ax1.set_yticklabels(ytick_labels)
-    # ax2.imshow(val_data.transpose()[:, :num_preds], cmap='coolwarm', vmin=vmin, vmax=vmax)
-    # ax2.set_title("Truth")
-    # ax2.set_xticks(xtick_idxs)
-    # ax2.set_xticklabels(xtick_labels)
-    # ax2.set_yticks(ytick_idxs)
-    # ax2.set_yticklabels(ytick_labels)
-    # ax3.imshow(val_data.transpose()[:, :num_preds], cmap='coolwarm', vmin=vmin, vmax=vmax)
-    # ax3.set_title("Truth")
-    # ax3.set_xticks(xtick_idxs)
-    # ax3.set_xticklabels(xtick_labels)
-    # ax3.set_yticks(ytick_idxs)
-    # ax3.set_yticklabels(ytick_labels)
-
-    # ax4.imshow(predicted3.transpose()[:, :num_preds], cmap='coolwarm', vmin=vmin, vmax=vmax)
-    # ax4.set_title("Conv. MRC Prediction")
-    # ax4.set_xticks(xtick_idxs)
-    # ax4.set_xticklabels(xtick_labels)
-    # ax4.set_yticks(ytick_idxs)
-    # ax4.set_yticklabels(ytick_labels)
-    # ax7.imshow((val_data[:num_preds] - predicted3[:num_preds]).transpose(), cmap='coolwarm', vmin=vmin, vmax=vmax)
-    # ax7.set_title("Conv. MRC Difference")
-    # ax7.set_xticks(xtick_idxs)
-    # ax7.set_xticklabels(xtick_labels)
-    # ax7.set_yticks(ytick_idxs)
-    # ax7.set_yticklabels(ytick_labels)
-    # ax7.set_xlabel("Lyapunov Time")
-
-    # ax5.imshow(predicted1.transpose()[:, :num_preds], cmap='coolwarm', vmin=vmin, vmax=vmax)
-    # ax5.set_title("MRC Prediction")
-    # ax5.set_xticks(xtick_idxs)
-    # ax5.set_xticklabels(xtick_labels)
-    # ax5.set_yticks(ytick_idxs)
-    # ax5.set_yticklabels(ytick_labels)
-    # ax8.imshow((val_data[:num_preds] - predicted1[:num_preds]).transpose(), cmap='coolwarm', vmin=vmin, vmax=vmax)
-    # ax8.set_title("MRC Difference")
-    # ax8.set_xticks(xtick_idxs)
-    # ax8.set_xticklabels(xtick_labels)
-    # ax8.set_yticks(ytick_idxs)
-    # ax8.set_yticklabels(ytick_labels)
-    # ax8.set_xlabel("Lyapunov Time")
-
-    # ax6.imshow(predicted2.transpose()[:, :num_preds], cmap='coolwarm', vmin=vmin, vmax=vmax)
-    # ax6.set_title("FFNN Prediction")
-    # ax6.set_xticks(xtick_idxs)
-    # ax6.set_xticklabels(xtick_labels)
-    # ax6.set_yticks(ytick_idxs)
-    # ax6.set_yticklabels(ytick_labels)
-    # ax9.imshow((val_data[:num_preds] - predicted2[:num_preds]).transpose(), cmap='coolwarm', vmin=vmin, vmax=vmax)
-    # ax9.set_title("FFNN Difference")
-    # ax9.set_xticks(xtick_idxs)
-    # ax9.set_xticklabels(xtick_labels)
-    # ax9.set_yticks(ytick_idxs)
-    # ax9.set_yticklabels(ytick_labels)
-    # ax9.set_xlabel("Lyapunov Time")
-
-    # plt.show()
-
+    # for model_class, model_params in model_configs:
+    #     for data_func in data_funcs:
+    #         print(model_class)
+    #         print(data_func)
+    #         print("T=10")
+    #         rc_climate_test(
+    #             tf=250,
+    #             dt=0.02,
+    #             model_class=model_class,
+    #             model_params=model_params,
+    #             data_func=data_func,
+    #             T=10,
+    #             k=2000,
+    #             iterations=20
+    #         )
+    #         print("T=0.2")
+    #         rc_climate_test(
+    #             tf=250,
+    #             dt=0.02,
+    #             model_class=model_class,
+    #             model_params=model_params,
+    #             data_func=data_func,
+    #             T=0.2,
+    #             k=2000,
+    #             iterations=20
+    #         )
+    #         print()
+    
