@@ -118,13 +118,13 @@ def rc_grid_search(traj, n_train, n_val, dim_reservoirs, deltas, in_densities, r
             mean_time
         ))
 
-def nn_grid_search(traj, n_train, n_val, dim_hiddens, stop_losses, lambdas, max_epochs, iterations=20, k=20):
+def nn_grid_search(traj, n_train, n_val, dim_hiddens, stop_losses, betas, lr, max_epochs, iterations=20, k=20):
     mean_times = []
     j = 0
-    n = len(dim_hidden) * len(stop_losses) * len(lambdas)
+    n = len(dim_hidden) * len(stop_losses) * len(betas)
     for dim_hidden in dim_hiddens:
         for stop_loss in stop_losses:
-            for l in lambdas:
+            for beta in betas:
                 times = []
                 for i in range(iterations):
                     idx = random.randrange(traj.shape[0] - n_train - n_val)
@@ -140,7 +140,9 @@ def nn_grid_search(traj, n_train, n_val, dim_hiddens, stop_losses, lambdas, max_
                         train_loader=train_loader,
                         net=FFNN,
                         lr=lr,
-                        epochs=1000
+                        max_epochs=max_epochs,
+                        beta=beta,
+                        stop_loss=stop_loss
                     )
 
                     predicted = generate_trajectory(
@@ -162,7 +164,7 @@ def nn_grid_search(traj, n_train, n_val, dim_hiddens, stop_losses, lambdas, max_
     mean_times = np.array(mean_times)
     sort_idxs = np.argsort(mean_times)[::-1]
 
-    print("dim_reservoir   delta   density   beta        | mean_time   ")
+    print("dim_hiddens   delta   density   beta        | mean_time   ")
     print("____________________________________________________________")
     for i in sort_idxs[:k]:
         dim_reservoir = dim_reservoirs[(i // (len(deltas) * len(densities) * len(betas)))]
@@ -379,14 +381,14 @@ if __name__ == "__main__":
     from data import *
     from torch.utils.data import DataLoader
 
-    # traj, _ = get_dadras_data(tf=12500, dt=0.02)
+    traj, _ = get_chen_data(tf=12500, dt=0.02)
 
-    # dim_reservoirs = [300]
-    # deltas = np.exp(np.linspace(np.log(0.01), np.log(3), 15))[4:12]
-    # in_densities = [0.5, 0.75, 1]
-    # rhos = [0.8, 0.9, 1, 1.1, 1.2]
-    # densities = [0.05, 0.1, 0.2, 0.5, 0.75, 1]
-    # betas = np.exp(np.linspace(np.log(1e-6), np.log(0.1), 5))
+    dim_reservoirs = [300]
+    deltas = np.exp(np.linspace(np.log(0.01), np.log(3), 15))[4:12]
+    in_densities = [0.5, 0.75, 1]
+    rhos = [0.8, 0.9, 1, 1.1, 1.2]
+    densities = [0.05, 0.1, 0.2, 0.5, 0.75, 1]
+    betas = np.exp(np.linspace(np.log(1e-6), np.log(0.1), 5))
 
     # dim_reservoirs = [300]
     # deltas = np.exp(np.linspace(np.log(0.01), np.log(3), 3))
@@ -407,18 +409,18 @@ if __name__ == "__main__":
     #     iterations=20
     # )
 
-    # rc_grid_search(
-    #     traj=traj,
-    #     n_train=10000,
-    #     n_val=2500,
-    #     dim_reservoirs=dim_reservoirs,
-    #     deltas=deltas,
-    #     in_densities=in_densities,
-    #     rhos=rhos,
-    #     densities=densities,
-    #     betas=betas,
-    #     iterations=4,
-    # )
+    rc_grid_search(
+        traj=traj,
+        n_train=10000,
+        n_val=2500,
+        dim_reservoirs=dim_reservoirs,
+        deltas=deltas,
+        in_densities=in_densities,
+        rhos=rhos,
+        densities=densities,
+        betas=betas,
+        iterations=20,
+    )
 
     rc_params_lorenz = {
         "dim_system":3,
@@ -438,12 +440,58 @@ if __name__ == "__main__":
         "beta":1e-6
     }
 
+    rc_params_dadras = {
+        "dim_system":3,
+        "dim_reservoir":300,
+        "delta":0.1732,
+        "in_density":1,
+        "rho":0.8,
+        "density":0.5,
+        "beta":1e-6
+    }
+
     mrc_params_dadras = {
         "dim_system":3,
         "dim_reservoir":300,
         "delta":0.1152,
         "in_density":1,
         "beta":1e-6
+    }
+
+    rc_params_rossler = {
+        "dim_system":3,
+        "dim_reservoir":300,
+        "delta":0.0510,
+        "in_density":1,
+        "rho":0.9,
+        "density":0.75,
+        "beta":1e-6
+    }
+
+    mrc_params_rossler = {
+        "dim_system":3,
+        "dim_reservoir":300,
+        "delta":0.0510,
+        "in_density":1,
+        "beta":1e-6
+    }
+
+    rc_params_chen = {
+        "dim_system":3,
+        "dim_reservoir":300,
+        "delta":0.2603,
+        "in_density":1,
+        "rho":1.2,
+        "density":0.5,
+        "beta":1.78e-5
+    }
+
+    mrc_params_chen = {
+        "dim_system":3,
+        "dim_reservoir":300,
+        "delta":0.3912,
+        "in_density":1,
+        "beta":1.78e-5
     }
 
     nn_params = {}
@@ -476,16 +524,16 @@ if __name__ == "__main__":
     # )
     # print(exps)
 
-    rc_climate_test(
-        tf=250,
-        dt=0.02,
-        model_class=MemorylessReservoirComputer,
-        model_params=mrc_params_dadras,
-        data_func=get_dadras_data,
-        T=10,
-        k=2000,
-        iterations=20
-    )
+    # rc_climate_test(
+    #     tf=250,
+    #     dt=0.02,
+    #     model_class=MemorylessReservoirComputer,
+    #     model_params=mrc_params_dadras,
+    #     data_func=get_dadras_data,
+    #     T=10,
+    #     k=2000,
+    #     iterations=20
+    # )
 
     # model_configs = [(MemorylessReservoirComputer, mrc_params), (ReservoirComputer, rc_params)]
     # data_funcs = [get_lorenz_data, get_rossler_data, get_chen_data, get_dadras_data]

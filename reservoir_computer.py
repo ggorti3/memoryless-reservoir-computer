@@ -118,22 +118,22 @@ if __name__ == "__main__":
     from mpl_toolkits.mplot3d import Axes3D
 
     dt = 0.02
-    train_data, val_data = get_lorenz_data(tf=400, dt=dt)
+    #train_data, val_data = get_lorenz_data(tf=400, dt=dt)
     # train_data, val_data = get_KS_data(num_gridpoints=100, tf=5000, dt=dt)
     # train_data, val_data = KS_from_csv("data/KS_L=44_tf=10000_dt=.25_D=64.csv", 3000, 1000, dt)
     # train_data, val_data = get_chen_data(tf=400, dt=dt, skip=25, split=0.8)
-    # train_data, val_data = get_rossler_data(tf=400, dt=dt, skip=25, split=0.8)
+    train_data, val_data = get_rossler_data(tf=400, dt=dt, skip=25, split=0.8)
     # train_data, val_data = get_dadras_data(tf=400, dt=dt, skip=25, split=0.8)
 
-    # MRC = MemorylessReservoirComputer(dim_reservoir=300, dim_system=3, delta=3, in_density=0.05)
-    # MRC.train(train_data)
-    # predicted = MRC.predict(val_data.shape[0])
+    MRC = MemorylessReservoirComputer(dim_reservoir=300, dim_system=3, delta=0.0510, in_density=1, beta=1e-6)
+    MRC.train(train_data)
+    predicted = MRC.predict(val_data.shape[0])
 
 
 
-    RC = ReservoirComputer(dim_system=3, dim_reservoir=300, delta=0.1, in_density=0.2, rho=1.1, density=0.05, beta=0.0001)
-    RC.train(train_data)
-    predicted = RC.predict(val_data.shape[0])
+    # RC = ReservoirComputer(dim_system=3, dim_reservoir=300, delta=0.1, in_density=0.2, rho=1.1, density=0.05, beta=0.0001)
+    # RC.train(train_data)
+    # predicted = RC.predict(val_data.shape[0])
 
     # plot_images(predicted, val_data, 600)
 

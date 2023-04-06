@@ -21,11 +21,11 @@ class FeedForwardNN(nn.Module):
 
         return x
 
-def train(train_loader, net, lr, epochs):
+def train(train_loader, net, lr, max_epochs, beta=None, stop_loss=None):
     net.train()
     optimizer = optim.Adam(net.parameters(), lr=lr)
     loss_f = nn.MSELoss()
-    for e in range(epochs):
+    for e in range(max_epochs):
         cum_loss = 0
         for i, (x, y) in enumerate(train_loader):
             optimizer.zero_grad()
@@ -35,6 +35,10 @@ def train(train_loader, net, lr, epochs):
             optimizer.step()
             with torch.no_grad():
                 cum_loss += loss
+
+                if stop_loss is not None:
+                    if cum_loss / (i + 1) < stop_loss:
+                        break
         print("Epoch {} mean loss: {}".format(e, cum_loss/(i + 1)))
 
 def generate_trajectory(net, x0, steps):
