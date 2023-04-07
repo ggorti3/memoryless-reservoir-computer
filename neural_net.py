@@ -4,6 +4,9 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset
 
+DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+#DEVICE = torch.device("cpu")
+
 class FeedForwardNN(nn.Module):
     def __init__(self, dim_system=3, dim_reservoir=300):
         super().__init__()
@@ -21,13 +24,16 @@ class FeedForwardNN(nn.Module):
 
         return x
 
-def train(train_loader, net, lr, max_epochs, beta=None, stop_loss=None):
+def train(train_loader, net, lr, max_epochs, beta=0, stop_loss=None, hide=False):
     net.train()
-    optimizer = optim.Adam(net.parameters(), lr=lr)
+    net = net.to(DEVICE)
+    optimizer = optim.Adam(net.parameters(), lr=lr, weight_decay=beta)
     loss_f = nn.MSELoss()
     for e in range(max_epochs):
         cum_loss = 0
         for i, (x, y) in enumerate(train_loader):
+            x = x.to(DEVICE)
+            y = y.to(DEVICE)
             optimizer.zero_grad()
             out = net(x)
             loss = loss_f(out, y)
@@ -36,13 +42,17 @@ def train(train_loader, net, lr, max_epochs, beta=None, stop_loss=None):
             with torch.no_grad():
                 cum_loss += loss
 
-                if stop_loss is not None:
-                    if cum_loss / (i + 1) < stop_loss:
-                        break
-        print("Epoch {} mean loss: {}".format(e, cum_loss/(i + 1)))
+        if stop_loss is not None:
+            if cum_loss / (i + 1) < stop_loss:
+                break
+        if not hide:
+            print("Epoch {} mean loss: {}".format(e, cum_loss/(i + 1)))
 
 def generate_trajectory(net, x0, steps):
+    net = net.to(DEVICE)
+
     x = torch.tensor(x0).unsqueeze(0)
+    x = x.to(DEVICE)
 
     traj_list = []
     net.eval()
@@ -69,23 +79,24 @@ if __name__ == "__main__":
     from visualization import compare, plot_images, short_term_time
     from torch.utils.data import DataLoader
 
-    # dt = 0.02
-    # train_data, val_data = get_chen_data(tf=250, dt=dt)
-    # train_set = ChaosDataset(train_data)
-    # train_loader = DataLoader(train_set, batch_size=32, shuffle=True)
-
-    dt = 0.25
-    train_data, val_data = KS_from_csv("data/KS_L=44_tf=10000_dt=.25_D=64.csv", 3000, 1000, dt)
+    dt = 0.02
+    train_data, val_data = get_lorenz_data(tf=250, dt=dt)
     train_set = ChaosDataset(train_data)
-    train_loader = DataLoader(train_set, batch_size=32, shuffle=True)
+    train_loader = DataLoader(train_set, batch_size=2500, shuffle=True)
 
-    FFNN = FeedForwardNN(64, 3000)
+    # dt = 0.25
+    # train_data, val_data = KS_from_csv("data/KS_L=44_tf=10000_dt=.25_D=64.csv", 3000, 1000, dt)
+    # train_set = ChaosDataset(train_data)
+    # train_loader = DataLoader(train_set, batch_size=512, shuffle=True)
+
+    FFNN = FeedForwardNN(3, 300)
 
     train(
         train_loader=train_loader,
         net=FFNN,
-        lr=0.00001,
-        epochs=1000
+        lr=1e-2,
+        max_epochs=200,
+        beta=1e-4
     )
 
     predicted = generate_trajectory(

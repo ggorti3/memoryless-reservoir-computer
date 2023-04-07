@@ -118,10 +118,10 @@ def rc_grid_search(traj, n_train, n_val, dim_reservoirs, deltas, in_densities, r
             mean_time
         ))
 
-def nn_grid_search(traj, n_train, n_val, dim_hiddens, stop_losses, betas, lr, max_epochs, iterations=20, k=20):
+def nn_grid_search(traj, n_train, n_val, dim_hiddens, stop_losses, betas, batch_size, lr, max_epochs, iterations=20, k=20):
     mean_times = []
     j = 0
-    n = len(dim_hidden) * len(stop_losses) * len(betas)
+    n = len(dim_hiddens) * len(stop_losses) * len(betas)
     for dim_hidden in dim_hiddens:
         for stop_loss in stop_losses:
             for beta in betas:
@@ -131,28 +131,27 @@ def nn_grid_search(traj, n_train, n_val, dim_hiddens, stop_losses, betas, lr, ma
                     training_data = traj[idx:(idx + n_train)]
                     val_data = traj[(idx + n_train):(idx + n_train + n_val)]
 
-                    train_set = ChaosDataset(train_data)
-                    train_loader = DataLoader(train_set, batch_size=32, shuffle=True)
+                    train_set = ChaosDataset(training_data)
+                    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
 
                     FFNN = FeedForwardNN(val_data.shape[1], dim_hidden)
 
                     train(
                         train_loader=train_loader,
                         net=FFNN,
-                        lr=lr,
+                        lr=lr * (dim_hidden / 300),
                         max_epochs=max_epochs,
                         beta=beta,
-                        stop_loss=stop_loss
+                        stop_loss=stop_loss,
+                        hide=True
                     )
 
-                    predicted = generate_trajectory(
+                    pred = generate_trajectory(
                         net=FFNN,
-                        x0=train_data[-1],
+                        x0=training_data[-1],
                         steps=val_data.shape[0]
                     )
 
-                    rsfn.train(training_data)
-                    pred = rsfn.predict(n_val)
                     time = short_term_time(val_data, pred, 0.02, tolerance=2e-1)
                     times.append(time)
                 
@@ -164,18 +163,16 @@ def nn_grid_search(traj, n_train, n_val, dim_hiddens, stop_losses, betas, lr, ma
     mean_times = np.array(mean_times)
     sort_idxs = np.argsort(mean_times)[::-1]
 
-    print("dim_hiddens   delta   density   beta        | mean_time   ")
+    print("dim_hiddens   stop_loss   beta        | mean_time   ")
     print("____________________________________________________________")
     for i in sort_idxs[:k]:
-        dim_reservoir = dim_reservoirs[(i // (len(deltas) * len(densities) * len(betas)))]
-        delta = deltas[(i // (len(densities) * len(betas))) % len(deltas)]
-        density = densities[(i // len(betas)) % len(densities)]
+        dim_hidden = dim_hiddens[(i // (len(stop_losses) * len(betas)))]
+        stop_loss = stop_losses[(i // len(betas)) % len(stop_losses)]
         beta = betas[i % len(betas)]
         mean_time = mean_times[i]
-        print("{:<16}{:<8.4f}{:<10.4f}{:<12.2E}| {:<12.4f}".format(
-            dim_reservoir,
-            delta,
-            density,
+        print("{:<14}{:<12.4f}{:<12.4E}| {:<12.4f}".format(
+            dim_hidden,
+            stop_loss,
             beta,
             mean_time
         ))
@@ -388,7 +385,11 @@ if __name__ == "__main__":
     in_densities = [0.5, 0.75, 1]
     rhos = [0.8, 0.9, 1, 1.1, 1.2]
     densities = [0.05, 0.1, 0.2, 0.5, 0.75, 1]
-    betas = np.exp(np.linspace(np.log(1e-6), np.log(0.1), 5))
+
+    betas = np.exp(np.linspace(np.log(1e-6), np.log(0.01), 4))
+    stop_losses = [0] + np.exp(np.linspace(np.log(0.0004), np.log(0.1), 6)).tolist()
+    dim_hiddens = [50, 150, 300]
+    dim_hiddens = [300]
 
     # dim_reservoirs = [300]
     # deltas = np.exp(np.linspace(np.log(0.01), np.log(3), 3))
@@ -409,17 +410,30 @@ if __name__ == "__main__":
     #     iterations=20
     # )
 
-    rc_grid_search(
+    # rc_grid_search(
+    #     traj=traj,
+    #     n_train=10000,
+    #     n_val=2500,
+    #     dim_reservoirs=dim_reservoirs,
+    #     deltas=deltas,
+    #     in_densities=in_densities,
+    #     rhos=rhos,
+    #     densities=densities,
+    #     betas=betas,
+    #     iterations=20,
+    # )
+
+    nn_grid_search(
         traj=traj,
         n_train=10000,
         n_val=2500,
-        dim_reservoirs=dim_reservoirs,
-        deltas=deltas,
-        in_densities=in_densities,
-        rhos=rhos,
-        densities=densities,
+        dim_hiddens=dim_hiddens,
+        stop_losses=stop_losses,
         betas=betas,
-        iterations=20,
+        batch_size=2500,
+        lr=1e-2,
+        max_epochs=200,
+        iterations=20
     )
 
     rc_params_lorenz = {
@@ -440,6 +454,13 @@ if __name__ == "__main__":
         "beta":1e-6
     }
 
+    nn_params_lorenz = {
+        "dim_system":3,
+        "dim_reservoir":300,
+        "stop_loss":0.0110,
+        "beta":2.1544e-5
+    }
+
     rc_params_dadras = {
         "dim_system":3,
         "dim_reservoir":300,
@@ -456,6 +477,13 @@ if __name__ == "__main__":
         "delta":0.1152,
         "in_density":1,
         "beta":1e-6
+    }
+
+    nn_params_dadras = {
+        "dim_system":3,
+        "dim_reservoir":300,
+        "stop_loss":0.0004,
+        "beta":2.1544e-5
     }
 
     rc_params_rossler = {
@@ -476,6 +504,13 @@ if __name__ == "__main__":
         "beta":1e-6
     }
 
+    nn_params_rossler = {
+        "dim_system":3,
+        "dim_reservoir":300,
+        "stop_loss":0,
+        "beta":4.6416e-4
+    }
+
     rc_params_chen = {
         "dim_system":3,
         "dim_reservoir":300,
@@ -494,7 +529,13 @@ if __name__ == "__main__":
         "beta":1.78e-5
     }
 
-    nn_params = {}
+    nn_params_chen = {
+        "dim_system":3,
+        "dim_reservoir":300,
+        "stop_loss":0.0004,
+        "beta":1e-6
+    }
+
 
     # short_term_test(
     #     tf=250,
