@@ -393,13 +393,6 @@ if __name__ == "__main__":
     dim_hiddens = [300]
     dim_hiddens = [3000]
 
-    # dim_reservoirs = [300]
-    # deltas = np.exp(np.linspace(np.log(0.01), np.log(3), 3))
-    # in_densities = [1]
-    # rhos = [0.9, 1.1]
-    # densities = [0.05, 0.2]
-    # betas = np.exp(np.linspace(np.log(1e-6), np.log(0.1), 3))
-
 
     # rsfn_grid_search(
     #     traj=traj,
