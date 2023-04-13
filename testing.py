@@ -139,7 +139,7 @@ def nn_grid_search(traj, n_train, n_val, dim_hiddens, stop_losses, betas, batch_
                     train(
                         train_loader=train_loader,
                         net=FFNN,
-                        lr=lr * (dim_hidden / 300),
+                        lr=lr * (dim_hidden / 3000),
                         max_epochs=max_epochs,
                         beta=beta,
                         stop_loss=stop_loss,
@@ -152,7 +152,7 @@ def nn_grid_search(traj, n_train, n_val, dim_hiddens, stop_losses, betas, batch_
                         steps=val_data.shape[0]
                     )
 
-                    time = short_term_time(val_data, pred, 0.02, tolerance=2e-1)
+                    time = short_term_time(val_data, pred, 0.25, tolerance=2e-1)
                     times.append(time)
                 
                 mean_time = np.mean(np.array(times))
@@ -378,7 +378,8 @@ if __name__ == "__main__":
     from data import *
     from torch.utils.data import DataLoader
 
-    traj, _ = get_chen_data(tf=12500, dt=0.02)
+    #traj, _ = get_chen_data(tf=12500, dt=0.02)
+    traj, _ = KS_from_csv("data/KS_L=44_tf=10000_dt=.25_D=64.csv", 10000, 0, dt=0.25)
 
     dim_reservoirs = [300]
     deltas = np.exp(np.linspace(np.log(0.01), np.log(3), 15))[4:12]
@@ -390,6 +391,7 @@ if __name__ == "__main__":
     stop_losses = [0] + np.exp(np.linspace(np.log(0.0004), np.log(0.1), 6)).tolist()
     dim_hiddens = [50, 150, 300]
     dim_hiddens = [300]
+    dim_hiddens = [3000]
 
     # dim_reservoirs = [300]
     # deltas = np.exp(np.linspace(np.log(0.01), np.log(3), 3))
@@ -430,9 +432,9 @@ if __name__ == "__main__":
         dim_hiddens=dim_hiddens,
         stop_losses=stop_losses,
         betas=betas,
-        batch_size=2500,
-        lr=1e-2,
-        max_epochs=200,
+        batch_size=512,
+        lr=1e-3,
+        max_epochs=100,
         iterations=20
     )
 
@@ -534,6 +536,13 @@ if __name__ == "__main__":
         "dim_reservoir":300,
         "stop_loss":0.0004,
         "beta":1e-6
+    }
+
+    nn_params_ks = {
+        "dim_system":64,
+        "dim_reservoir":3000,
+        "stop_loss":0,
+        "beta":2.1544e-5
     }
 
 

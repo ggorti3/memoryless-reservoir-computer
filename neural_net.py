@@ -79,23 +79,23 @@ if __name__ == "__main__":
     from visualization import compare, plot_images, short_term_time
     from torch.utils.data import DataLoader
 
-    dt = 0.02
-    train_data, val_data = get_lorenz_data(tf=250, dt=dt)
-    train_set = ChaosDataset(train_data)
-    train_loader = DataLoader(train_set, batch_size=2500, shuffle=True)
-
-    # dt = 0.25
-    # train_data, val_data = KS_from_csv("data/KS_L=44_tf=10000_dt=.25_D=64.csv", 3000, 1000, dt)
+    # dt = 0.02
+    # train_data, val_data = get_lorenz_data(tf=250, dt=dt)
     # train_set = ChaosDataset(train_data)
-    # train_loader = DataLoader(train_set, batch_size=512, shuffle=True)
+    # train_loader = DataLoader(train_set, batch_size=2500, shuffle=True)
 
-    FFNN = FeedForwardNN(3, 300)
+    dt = 0.25
+    train_data, val_data = KS_from_csv("data/KS_L=44_tf=10000_dt=.25_D=64.csv", 3000, 1000, dt)
+    train_set = ChaosDataset(train_data)
+    train_loader = DataLoader(train_set, batch_size=512, shuffle=True)
+
+    FFNN = FeedForwardNN(64, 3000)
 
     train(
         train_loader=train_loader,
         net=FFNN,
-        lr=1e-2,
-        max_epochs=200,
+        lr=1e-3,
+        max_epochs=100,
         beta=1e-4
     )
 
