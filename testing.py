@@ -177,6 +177,70 @@ def nn_grid_search(traj, n_train, n_val, dim_hiddens, stop_losses, betas, batch_
             mean_time
         ))
 
+def rc_coord_descent(traj, n_train, n_val, hyperparams, dim_reservoirs, deltas, in_densities, rhos, densities, betas, iterations=20, k=20):
+    search_params = [
+        ("dim_reservoir", dim_reservoirs),
+        ("delta", deltas),
+        ("in_density", in_densities),
+        ("rho", rhos),
+        ("density", densities),
+        ("beta", betas)
+    ]
+    for param_name, params in search_params:
+        best_time = float("inf")
+        best_param = None
+        for param in params:
+            hyperparams[param_name] = param
+            times = []
+            for i in range(iterations):
+                idx = random.randrange(traj.shape[0] - n_train - n_val)
+                training_data = traj[idx:(idx + n_train)]
+                rc = ReservoirComputer(
+                    dim_system=traj.shape[1],
+                    **hyperparams
+                )
+                rc.train(training_data)
+                pred = rc.predict(n_val)
+                time = short_term_time(val_data, pred, 0.02, tolerance=2e-1)
+                times.append(time)
+            mean_time = np.mean(np.array(times))
+            if mean_time < best_time:
+                best_time = mean_time
+                best_param = param
+        hyperparams[param_name] = best_param
+    return hyperparams
+
+def rsbn_coord_descent(traj, n_train, n_val, hyperparams, dim_reservoirs, deltas, in_densities, betas, iterations=20, k=20):
+    search_params = [
+        ("dim_reservoir", dim_reservoirs),
+        ("delta", deltas),
+        ("in_density", in_densities),
+        ("beta", betas)
+    ]
+    for param_name, params in search_params:
+        best_time = float("inf")
+        best_param = None
+        for param in params:
+            hyperparams[param_name] = param
+            times = []
+            for i in range(iterations):
+                idx = random.randrange(traj.shape[0] - n_train - n_val)
+                training_data = traj[idx:(idx + n_train)]
+                rc = MemorylessReservoirComputer(
+                    dim_system=traj.shape[1],
+                    **hyperparams
+                )
+                rc.train(training_data)
+                pred = rc.predict(n_val)
+                time = short_term_time(val_data, pred, 0.02, tolerance=2e-1)
+                times.append(time)
+            mean_time = np.mean(np.array(times))
+            if mean_time < best_time:
+                best_time = mean_time
+                best_param = param
+        hyperparams[param_name] = best_param
+    return hyperparams
+
 def short_term_test(tf, dt, rc_params, mrc_params, nn_params, data_func, iterations, lambda1):
     x0 = np.random.rand(3)
     train_data, val_data = data_func(tf=tf, dt=dt, x0=x0)
