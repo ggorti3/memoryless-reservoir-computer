@@ -38,14 +38,8 @@ def lin_reg(R, U, beta=0.0001):
     W_out: the optimized W_out array
     """
     
-    # Rt = np.transpose(R)
-    # W_out = np.matmul(np.matmul(np.transpose(U), Rt), np.linalg.inv(np.matmul(R, Rt) + beta * np.identity(R.shape[0])))
-    X = R.T
-    Y = U
-
-    U, S_diag, Vt = np.linalg.svd(X, full_matrices=False)
-    V = Vt.T
-    W_out = (V @ (U.T * (S_diag / (S_diag**2 + beta))[:, np.newaxis]) @ Y).T
+    Rt = np.transpose(R)
+    W_out = np.matmul(np.matmul(np.transpose(U), Rt), np.linalg.inv(np.matmul(R, Rt) + beta * np.identity(R.shape[0])))
 
     return W_out
 
